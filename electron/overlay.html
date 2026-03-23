@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Overlay</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; cursor: crosshair !important; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: transparent;
+    -webkit-app-region: no-drag;
+    user-select: none;
+    -webkit-user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  }
+  #root {
+    position: fixed; inset: 0;
+  }
+  canvas#bg   { position: absolute; inset: 0; width: 100%; height: 100%; }
+  canvas#draw { position: absolute; inset: 0; width: 100%; height: 100%; }
+  canvas { pointer-events: none; }
+
+  #dims {
+    position: absolute; pointer-events: none;
+    background: rgba(0,0,0,0.78); color: #fff;
+    font-size: 12px; font-weight: 500;
+    padding: 3px 8px; border-radius: 5px;
+    white-space: nowrap; display: none;
+    letter-spacing: 0.3px;
+  }
+
+  #magnifier {
+    position: absolute; pointer-events: none;
+    width: 120px; height: 120px;
+    border-radius: 50%; overflow: hidden;
+    border: 2px solid rgba(255,255,255,0.6);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    display: none;
+    image-rendering: pixelated;
+  }
+  #magnifier canvas { width: 100%; height: 100%; }
+
+  #modeHint {
+    position: fixed; bottom: 32px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.72); color: rgba(255,255,255,0.85);
+    font-size: 13px; font-weight: 500;
+    padding: 8px 20px; border-radius: 10px;
+    letter-spacing: 0.2px;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <canvas id="bg"></canvas>
+  <canvas id="draw"></canvas>
+  <div id="dims"></div>
+  <div id="magnifier"><canvas id="magCanvas" width="120" height="120"></canvas></div>
+  <div id="modeHint">Drag to select area &nbsp;·&nbsp; <b>F</b> fullscreen &nbsp;·&nbsp; <b>Esc</b> cancel</div>
+</div>
+<script>
+(function () {
+  const bgCanvas  = document.getElementById("bg");
+  const bgCtx     = bgCanvas.getContext("2d");
+  const drawCanvas = document.getElementById("draw");
+  const drawCtx   = drawCanvas.getContext("2d");
+  const dims      = document.getElementById("dims");
+  const magnifier = document.getElementById("magnifier");
+  const magCanvas = document.getElementById("magCanvas");
+  const magCtx    = magCanvas.getContext("2d");
+
+  let frozenImg = null;
+  let scaleFactor = 1;
+  let screenW = window.innerWidth;
+  let screenH = window.innerHeight;
+
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+  let currentX = 0;
+  let currentY = 0;
+  let mouseX = 0;
+  let mouseY = 0;
+  let selection = null;
+
+  const OVERLAY_COLOR = "rgba(0,0,0,0.42)";
+  const SEL_STROKE = "rgba(255,255,255,0.85)";
+  const MAG_ZOOM = 6;
+
+  function initCanvases(w, h) {
+    screenW = w;
+    screenH = h;
+    bgCanvas.width = w;
+    bgCanvas.height = h;
+    drawCanvas.width = w;
+    drawCanvas.height = h;
+  }
+
+  function drawBackground() {
+    bgCtx.clearRect(0, 0, screenW, screenH);
+    if (frozenImg) {
+      bgCtx.drawImage(frozenImg, 0, 0, screenW, screenH);
+    }
+  }
+
+  function drawSelection() {
+    drawCtx.clearRect(0, 0, screenW, screenH);
+    drawCtx.fillStyle = OVERLAY_COLOR;
+    drawCtx.fillRect(0, 0, screenW, screenH);
+
+    if (!selection) return;
+
+    const x = selection.x;
+    const y = selection.y;
+    const width = selection.width;
+    const height = selection.height;
+
+    if (width < 2 || height < 2) return;
+
+    drawCtx.clearRect(x, y, width, height);
+
+    drawCtx.strokeStyle = SEL_STROKE;
+    drawCtx.lineWidth = 1.5;
+    drawCtx.setLineDash([]);
+    drawCtx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
+
+    const handleSize = 6;
+    drawCtx.fillStyle = "#fff";
+    const corners = [
+      [x, y],
+      [x + width, y],
+      [x, y + height],
+      [x + width, y + height],
+    ];
+    for (const [cx, cy] of corners) {
+      drawCtx.fillRect(cx - handleSize / 2, cy - handleSize / 2, handleSize, handleSize);
+    }
+
+    if (isDragging) {
+      const rw = Math.round(width * scaleFactor);
+      const rh = Math.round(height * scaleFactor);
+      dims.textContent = `${rw} × ${rh}`;
+      dims.style.display = "block";
+      let dx = x + width / 2 - dims.offsetWidth / 2;
+      let dy = y + height + 10;
+      if (dy + 30 > screenH) dy = y - 28;
+      if (dx < 4) dx = 4;
+      dims.style.left = dx + "px";
+      dims.style.top = dy + "px";
+    }
+  }
+
+  function drawMagnifier() {
+    if (!frozenImg || isDragging) {
+      magnifier.style.display = "none";
+      return;
+    }
+
+    magnifier.style.display = "block";
+    const sz = 120;
+    const half = sz / 2;
+
+    let mx = mouseX + 20;
+    let my = mouseY - sz - 10;
+    if (my < 10) my = mouseY + 20;
+    if (mx + sz > screenW - 10) mx = mouseX - sz - 20;
+    magnifier.style.left = mx + "px";
+    magnifier.style.top = my + "px";
+
+    magCtx.imageSmoothingEnabled = false;
+    magCtx.clearRect(0, 0, sz, sz);
+
+    magCtx.save();
+    magCtx.beginPath();
+    magCtx.arc(half, half, half, 0, Math.PI * 2);
+    magCtx.clip();
+
+    const srcSize = sz / MAG_ZOOM;
+    const sx = mouseX * scaleFactor - srcSize / 2;
+    const sy = mouseY * scaleFactor - srcSize / 2;
+    magCtx.drawImage(frozenImg, sx, sy, srcSize, srcSize, 0, 0, sz, sz);
+
+    magCtx.strokeStyle = "rgba(255,255,255,0.5)";
+    magCtx.lineWidth = 0.5;
+    magCtx.beginPath();
+    magCtx.moveTo(half, 0);
+    magCtx.lineTo(half, sz);
+    magCtx.moveTo(0, half);
+    magCtx.lineTo(sz, half);
+    magCtx.stroke();
+
+    magCtx.restore();
+  }
+
+  function render() {
+    drawSelection();
+    drawMagnifier();
+  }
+
+  document.addEventListener("mousedown", (e) => {
+    selection = null;
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    currentX = e.clientX;
+    currentY = e.clientY;
+    dims.style.display = "none";
+    magnifier.style.display = "none";
+    render();
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+
+    if (isDragging) {
+      currentX = e.clientX;
+      currentY = e.clientY;
+      selection = {
+        x: Math.min(startX, currentX),
+        y: Math.min(startY, currentY),
+        width: Math.abs(startX - currentX),
+        height: Math.abs(startY - currentY),
+      };
+    }
+
+    render();
+  });
+
+  document.addEventListener("mouseup", async (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+
+    currentX = e.clientX;
+    currentY = e.clientY;
+
+    const rect = {
+      x: Math.min(startX, currentX),
+      y: Math.min(startY, currentY),
+      width: Math.abs(startX - currentX),
+      height: Math.abs(startY - currentY),
+    };
+
+    if (rect.width < 5 || rect.height < 5) return;
+
+    selection = rect;
+    render();
+
+    window.electronAPI.captureArea({
+      action: "copy",
+      rect,
+    });
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      window.electronAPI.cancel();
+    } else if (e.key === "f" || e.key === "F") {
+      window.electronAPI.captureFullscreen();
+    }
+  });
+
+  window.addEventListener("resize", () => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    if (w !== screenW || h !== screenH) {
+      initCanvases(w, h);
+      drawBackground();
+      render();
+    }
+  });
+
+  window.electronAPI.onStart((data) => {
+    scaleFactor = data.scaleFactor || 1;
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    initCanvases(w, h);
+
+    isDragging = false;
+    selection = null;
+    dims.style.display = "none";
+    magnifier.style.display = "none";
+
+    const image = new Image();
+    image.onload = () => {
+      frozenImg = image;
+      drawBackground();
+      render();
+    };
+    image.src = data.frozenFrame;
+  });
+})();
+</script>
+</body>
+</html>

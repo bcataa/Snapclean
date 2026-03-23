@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Capture</title></head>
+<body>
+<script>
+window.captureAPI.onGrab(async () => {
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        width:     { ideal: 9999 },
+        height:    { ideal: 9999 },
+        frameRate: { ideal: 1 },
+      },
+      audio: false,
+    });
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    await video.play();
+
+    // Wait two frames so the very first (sometimes black) frame is skipped
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const canvas = document.createElement("canvas");
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    stream.getTracks().forEach((t) => t.stop());
+    video.srcObject = null;
+
+    const dataUrl = canvas.toDataURL("image/png");
+    console.log(
+      "[capture:renderer] grabbed frame",
+      canvas.width, "x", canvas.height,
+      "dataUrl length", dataUrl.length
+    );
+    window.captureAPI.sendResult(dataUrl);
+  } catch (err) {
+    console.error("[capture:renderer] getDisplayMedia failed:", err);
+    window.captureAPI.sendResult(null);
+  }
+});
+</script>
+</body>
+</html>
