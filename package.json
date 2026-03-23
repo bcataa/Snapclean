@@ -12,7 +12,7 @@
     "lint": "next lint",
     "electron": "electron .",
     "dev:electron": "concurrently \"npm run dev\" \"electron .\"",
-    "build:mac": "electron-builder --mac"
+    "build:mac": "electron-builder --mac --publish never"
   },
   "dependencies": {
     "electron-updater": "^6.8.3",
