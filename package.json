@@ -6,13 +6,13 @@
   "scripts": {
     "dev": "next dev",
     "clean": "rm -rf .next out",
-    "build": "npm run clean && next build",
+    "build": "next build",
     "build:web": "npm run clean && next build",
     "start": "next start",
     "lint": "next lint",
     "electron": "electron .",
     "dev:electron": "concurrently \"npm run dev\" \"electron .\"",
-    "build:mac": "npm run build:web && electron-builder --mac dmg"
+    "build:mac": "electron-builder --mac"
   },
   "dependencies": {
     "electron-updater": "^6.8.3",
