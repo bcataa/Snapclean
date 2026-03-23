@@ -59,13 +59,6 @@
     },
     "dmg": {
       "artifactName": "SnapClean-mac.${ext}"
-    },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "${env.GH_OWNER}",
-        "repo": "${env.GH_REPO}"
-      }
-    ]
+    }
   }
 }
