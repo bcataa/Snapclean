@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 
+const directMacDownloadUrl =
+  process.env.NEXT_PUBLIC_MAC_DOWNLOAD_URL ||
+  "https://github.com/bcataa/Snapclean/releases/latest/download/SnapClean-mac.dmg";
+
 const features = [
   {
     icon: "⚡",
@@ -64,7 +68,9 @@ export default function LandingPage() {
         </p>
         <div className="flex gap-4 pt-2">
           <a
-            href="/download"
+            href={directMacDownloadUrl}
+            target="_blank"
+            rel="noreferrer"
             className="rounded-xl bg-blue-600 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 transition-all hover:bg-blue-500 hover:shadow-blue-500/30 active:scale-[0.98]"
           >
             Download for Mac
@@ -123,7 +129,9 @@ export default function LandingPage() {
         <h2 className="text-2xl font-semibold sm:text-3xl">Ready to capture?</h2>
         <p className="text-zinc-500">Download SnapClean and start screenshotting.</p>
         <a
-          href="/download"
+          href={directMacDownloadUrl}
+          target="_blank"
+          rel="noreferrer"
           className="rounded-xl bg-blue-600 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 transition-all hover:bg-blue-500 active:scale-[0.98]"
         >
           Download for Mac

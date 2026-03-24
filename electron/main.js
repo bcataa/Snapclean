@@ -1310,6 +1310,12 @@ function createTray() {
         mainWindow.focus();
       },
     },
+    {
+      label: "Check for Updates",
+      click: () => {
+        void checkForUpdatesManual();
+      },
+    },
     { type: "separator" },
     {
       label: "Quit",
@@ -1369,6 +1375,9 @@ app.whenReady().then(() => {
   createOverlayWindow();
   createPreviewWindow();
   createCaptureWindow();
+  if (process.platform === "darwin") {
+    createTray();
+  }
   registerShortcutFromSettings();
   showEditorWindowAnimated();
 
